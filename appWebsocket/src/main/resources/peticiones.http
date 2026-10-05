@@ -1,0 +1,40 @@
+### Probar el Login de Administrador
+POST http://localhost:8080/api/auth/login
+Content-Type: application/json
+
+{
+  "dni": "12345678",
+  "password": "123456"
+}
+
+### Generar Hash
+GET http://localhost:8080/api/auth/generar-hash
+
+### Registrar Nuevo Envío (Protegido por JWT)
+POST http://localhost:8080/api/envios/registrar
+Content-Type: application/json
+Authorization: Bearer eyJhbGciOiJIUzM4NCJ9.eyJzdWIiOiIxMjM0NTY3OCIsImlhdCI6MTc5MTE1MzYwOSwiZXhwIjoxNzkxMTg5NjA5fQ.BApCkXnnk4dyiQI5y5iKyEc2HPV-KMThu-dzreErvgu_7W5USAybk-3metsNtzsg
+
+{
+  "remitenteDni": "70123456",
+  "destinatarioDni": "70654321",
+  "pesoReal": 2.5,
+  "largo": 40,
+  "ancho": 30,
+  "alto": 20,
+  "idAgenciaOrigen": 1,
+  "idAgenciaDestino": 2,
+  "modalidadPago": "PAGO_ORIGEN",
+  "metodoPago": "EFECTIVO"
+}
+
+### Registrar un nuevo Conductor/Repartidor
+POST http://localhost:8080/api/auth/registro
+Content-Type: application/json
+
+{
+  "dni": "80001111",
+  "password": "misuperpassword",
+  "rol": "ROLE_REPARTIDOR",
+  "idAgencia": 1
+}

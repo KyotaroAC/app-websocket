@@ -1,0 +1,2 @@
+[variables]
+JAVA_TOOL_OPTIONS = "-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0 -Xmx350m -Xss512k -XX:+ExitOnOutOfMemoryError"

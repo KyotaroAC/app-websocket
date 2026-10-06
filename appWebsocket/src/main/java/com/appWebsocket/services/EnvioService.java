@@ -29,6 +29,7 @@ public class EnvioService {
     private final SimpMessagingTemplate messagingTemplate;
 
     private final BigDecimal TARIFA_POR_KILO = new BigDecimal("15.00");
+    private final Map<String, java.util.concurrent.atomic.AtomicInteger> correlativoPorSerie = new java.util.concurrent.ConcurrentHashMap<>();
 
     public EnvioService(EnvioRepository envioRepository,
                         AgenciaRepository agenciaRepository,
@@ -42,6 +43,25 @@ public class EnvioService {
         this.messagingTemplate = messagingTemplate;
     }
 
+    private boolean esAdmin(Usuario u) {
+        if (u == null || u.getRol() == null) return false;
+        String rol = u.getRol().getNombre();
+        return "ROLE_ADMIN".equalsIgnoreCase(rol) || "ADMIN".equalsIgnoreCase(rol);
+    }
+
+    private int generarSiguienteNumeroComprobante(String serie) {
+        return correlativoPorSerie.compute(serie, (k, v) -> {
+            if (v == null) {
+                Integer maxActual = envioRepository.findMaxNumeroComprobanteBySerie(serie);
+                int inicial = (maxActual != null && maxActual >= 1000) ? maxActual : 1000;
+                return new java.util.concurrent.atomic.AtomicInteger(inicial + 1);
+            } else {
+                v.incrementAndGet();
+                return v;
+            }
+        }).get();
+    }
+
     private Usuario getUsuarioActual() {
         String dniEmpleado = SecurityContextHolder.getContext().getAuthentication().getName();
         return usuarioRepository.findByDni(dniEmpleado)
@@ -51,12 +71,18 @@ public class EnvioService {
     @Transactional
     public Envio registrarEnvio(EnvioRequest request) {
         Usuario empleado = getUsuarioActual();
+        boolean esAdmin = esAdmin(empleado);
 
-        Agencia origen = empleado.getAgencia();
-        if (origen == null) {
+        Agencia origen;
+        if (!esAdmin && empleado.getAgencia() != null) {
+            // Un operario regular (ej. Huacho) SOLO puede registrar envíos desde su sede asignada
+            origen = empleado.getAgencia();
+        } else {
             if (request.getIdAgenciaOrigen() != null) {
                 origen = agenciaRepository.findById(request.getIdAgenciaOrigen())
                         .orElseThrow(() -> new RuntimeException("Agencia de origen no existe"));
+            } else if (empleado.getAgencia() != null) {
+                origen = empleado.getAgencia();
             } else {
                 throw new RuntimeException("Es necesario especificar una agencia de origen para este usuario.");
             }
@@ -64,6 +90,12 @@ public class EnvioService {
 
         Agencia destino = agenciaRepository.findById(request.getIdAgenciaDestino())
                 .orElseThrow(() -> new RuntimeException("Agencia de destino no existe"));
+
+        // VALIDACIÓN ESTRICTA: Destino no puede ser igual a Origen
+        if (origen.getId().equals(destino.getId())) {
+            throw new RuntimeException("RESTRICCIÓN LOGÍSTICA: La agencia de destino (" + destino.getNombre() 
+                    + ") no puede ser la misma que la agencia de origen. Seleccione una sede diferente.");
+        }
 
         BigDecimal volumen = request.getLargo().multiply(request.getAncho()).multiply(request.getAlto());
         BigDecimal pesoVolumetrico = volumen.divide(new BigDecimal("5000"), 2, RoundingMode.HALF_UP);
@@ -80,7 +112,8 @@ public class EnvioService {
                 : (request.getRemitenteDni().length() == 11 ? "FACTURA" : "BOLETA");
 
         String serieComp = "FACTURA".equalsIgnoreCase(tipoComp) ? "F001" : "B001";
-        int numeroComp = (int) (envioRepository.count() + 1001);
+        // Generación de correlativo atómica y thread-safe contra condiciones de carrera
+        int numeroComp = generarSiguienteNumeroComprobante(serieComp);
 
         // Clave de Seguridad de 4 Dígitos para Entrega (PIN)
         String claveEntrega = request.getClaveEntrega();
@@ -146,6 +179,7 @@ public class EnvioService {
     @Transactional
     public Envio entregarEnvioConPin(EntregaPaqueteRequest req) {
         Usuario empleado = getUsuarioActual();
+        boolean esAdmin = esAdmin(empleado);
 
         // Bloqueo pesimista: garantiza que ninguna otra transacción intente entregar o reasignar este paquete simultáneamente
         Envio envio = envioRepository.findByCodigoTrackingWithLock(req.getCodigoTracking())
@@ -153,6 +187,15 @@ public class EnvioService {
 
         if ("ENTREGADO".equalsIgnoreCase(envio.getEstadoActual())) {
             throw new RuntimeException("Este paquete ya fue entregado con anterioridad.");
+        }
+
+        // VALIDACIÓN ESTRICTA DE AGENCIA: Un operario solo puede entregar paquetes que llegaron a SU sede de destino
+        if (!esAdmin && empleado.getAgencia() != null) {
+            if (!empleado.getAgencia().getId().equals(envio.getAgenciaDestino().getId())) {
+                throw new RuntimeException("ACCESO DENEGADO: Este paquete pertenece a la sede de entrega " 
+                        + envio.getAgenciaDestino().getNombre() + ". Su cuenta está asignada a " 
+                        + empleado.getAgencia().getNombre() + " y no está autorizado para entregar encomiendas de otra agencia.");
+            }
         }
 
         // Validación estricta del PIN de 4 dígitos

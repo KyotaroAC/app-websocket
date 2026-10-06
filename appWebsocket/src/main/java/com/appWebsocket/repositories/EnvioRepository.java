@@ -52,4 +52,10 @@ public interface EnvioRepository extends JpaRepository<Envio, Integer> {
     List<Envio> findByAgenciaOrigenIdAndEstadoActual(Integer agenciaId, String estadoActual);
 
     List<Envio> findByAgenciaDestinoIdAndEstadoActual(Integer agenciaId, String estadoActual);
+
+    // ==========================================
+    // CORRELATIVO TRIBUTARIO ATÓMICO (ANTI-DUPLICADOS)
+    // ==========================================
+    @Query("SELECT COALESCE(MAX(e.numeroComprobante), 1000) FROM Envio e WHERE e.serieComprobante = :serie")
+    Integer findMaxNumeroComprobanteBySerie(@Param("serie") String serie);
 }

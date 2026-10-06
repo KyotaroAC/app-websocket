@@ -1,7 +1,6 @@
 package com.appWebsocket.services;
 
-import com.appWebsocket.dtos.EnvioRequest;
-import com.appWebsocket.dtos.TrackingDetalleDTO;
+import com.appWebsocket.dtos.*;
 import com.appWebsocket.entities.Agencia;
 import com.appWebsocket.entities.Envio;
 import com.appWebsocket.entities.HistorialEnvio;
@@ -15,8 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.List;
-import java.util.UUID;
+import java.time.LocalDateTime;
+import java.util.*;
 
 @Service
 public class EnvioService {
@@ -38,11 +37,15 @@ public class EnvioService {
         this.historialEnvioService = historialEnvioService;
     }
 
+    private Usuario getUsuarioActual() {
+        String dniEmpleado = SecurityContextHolder.getContext().getAuthentication().getName();
+        return usuarioRepository.findByDni(dniEmpleado)
+                .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado"));
+    }
+
     @Transactional
     public Envio registrarEnvio(EnvioRequest request) {
-        String dniEmpleado = SecurityContextHolder.getContext().getAuthentication().getName();
-        Usuario empleado = usuarioRepository.findByDni(dniEmpleado)
-                .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado"));
+        Usuario empleado = getUsuarioActual();
 
         Agencia origen = empleado.getAgencia();
         if (origen == null) {
@@ -62,6 +65,24 @@ public class EnvioService {
         BigDecimal pesoFacturable = request.getPesoReal().max(pesoVolumetrico);
         BigDecimal costoTotal = pesoFacturable.multiply(TARIFA_POR_KILO);
 
+        // Desglose Tributario (Base imponible e IGV 18%)
+        BigDecimal subtotal = costoTotal.divide(new BigDecimal("1.18"), 2, RoundingMode.HALF_UP);
+        BigDecimal igv = costoTotal.subtract(subtotal);
+
+        // Comprobante Electrónico (Boleta o Factura)
+        String tipoComp = (request.getTipoComprobante() != null && !request.getTipoComprobante().isBlank())
+                ? request.getTipoComprobante().toUpperCase()
+                : (request.getRemitenteDni().length() == 11 ? "FACTURA" : "BOLETA");
+
+        String serieComp = "FACTURA".equalsIgnoreCase(tipoComp) ? "F001" : "B001";
+        int numeroComp = (int) (envioRepository.count() + 1001);
+
+        // Clave de Seguridad de 4 Dígitos para Entrega (PIN)
+        String claveEntrega = request.getClaveEntrega();
+        if (claveEntrega == null || !claveEntrega.matches("\\d{4}")) {
+            claveEntrega = String.format("%04d", new Random().nextInt(10000));
+        }
+
         String estadoPago = "PENDIENTE";
         if ("PAGO_ORIGEN".equalsIgnoreCase(request.getModalidadPago())) {
             estadoPago = "PAGADO";
@@ -71,11 +92,19 @@ public class EnvioService {
 
         Envio envio = new Envio();
         envio.setCodigoTracking("TRK-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase());
+        envio.setTipoComprobante(tipoComp);
+        envio.setSerieComprobante(serieComp);
+        envio.setNumeroComprobante(numeroComp);
         envio.setRemitenteDni(request.getRemitenteDni());
         envio.setDestinatarioDni(request.getDestinatarioDni());
         envio.setPesoReal(request.getPesoReal());
         envio.setPesoVolumetrico(pesoVolumetrico);
+        envio.setSubtotal(subtotal);
+        envio.setIgv(igv);
         envio.setCostoTotal(costoTotal);
+        envio.setClaveEntrega(claveEntrega);
+        envio.setNumeroOperacionPago(request.getNumeroOperacionPago());
+        envio.setUbicacionAlmacen(request.getUbicacionAlmacen() != null ? request.getUbicacionAlmacen() : "BAHIA_RECEPCION");
         envio.setAgenciaOrigen(origen);
         envio.setAgenciaDestino(destino);
         envio.setModalidadPago(request.getModalidadPago());
@@ -85,21 +114,155 @@ public class EnvioService {
 
         Envio guardado = envioRepository.save(envio);
 
-        // Registro de auditoria inmediata en KARDEX / Historial
+        // Auditoría KARDEX
         historialEnvioService.registrarEvento(
                 guardado,
                 empleado,
                 "REGISTRADO",
-                "Recepción y pesaje en " + origen.getNombre()
+                "Emisión de " + tipoComp + " " + serieComp + "-" + numeroComp + " en " + origen.getNombre()
         );
 
         return guardado;
     }
 
+    // =========================================================================
+    // ENTREGA FÍSICA CON BLOQUEO PESIMISTA Y VALIDACIÓN DE PIN DE 4 DÍGITOS
+    // =========================================================================
+    @Transactional
+    public Envio entregarEnvioConPin(EntregaPaqueteRequest req) {
+        Usuario empleado = getUsuarioActual();
+
+        // Bloqueo pesimista: garantiza que ninguna otra transacción intente entregar o reasignar este paquete simultáneamente
+        Envio envio = envioRepository.findByCodigoTrackingWithLock(req.getCodigoTracking())
+                .orElseThrow(() -> new RuntimeException("No se encontró el envío con código: " + req.getCodigoTracking()));
+
+        if ("ENTREGADO".equalsIgnoreCase(envio.getEstadoActual())) {
+            throw new RuntimeException("Este paquete ya fue entregado con anterioridad.");
+        }
+
+        // Validación estricta del PIN de 4 dígitos
+        if (!envio.getClaveEntrega().equals(req.getClaveEntrega())) {
+            throw new RuntimeException("CLAVE DE RETIRO INCORRECTA: El código de 4 dígitos ingresado no coincide con el registrado por el remitente.");
+        }
+
+        if (req.getDniReceptor() == null || req.getDniReceptor().isBlank()) {
+            throw new RuntimeException("Debe ingresar el DNI de la persona que retira la encomienda.");
+        }
+
+        envio.setDniReceptor(req.getDniReceptor().trim());
+        envio.setNombreReceptor(req.getNombreReceptor() != null ? req.getNombreReceptor().trim() : "Receptor DNI " + req.getDniReceptor());
+        envio.setFechaEntrega(LocalDateTime.now());
+        envio.setEstadoActual("ENTREGADO");
+        if ("PENDIENTE".equalsIgnoreCase(envio.getEstadoPago())) {
+            envio.setEstadoPago("PAGADO");
+        }
+
+        Envio entregado = envioRepository.save(envio);
+
+        historialEnvioService.registrarEvento(
+                entregado,
+                empleado,
+                "ENTREGADO",
+                "Entrega física exitosa con validación de PIN. Retirado por: " + envio.getNombreReceptor() + " (DNI: " + envio.getDniReceptor() + ")"
+        );
+
+        return entregado;
+    }
+
+    // =========================================================================
+    // RECTIFICACIÓN / CAMBIO DE CLAVE DE ENTREGA
+    // =========================================================================
+    @Transactional
+    public Envio rectificarClaveEntrega(CambioClaveEntregaRequest req) {
+        Usuario empleado = getUsuarioActual();
+
+        Envio envio = envioRepository.findByCodigoTrackingWithLock(req.getCodigoTracking())
+                .orElseThrow(() -> new RuntimeException("No se encontró el paquete con código: " + req.getCodigoTracking()));
+
+        if ("ENTREGADO".equalsIgnoreCase(envio.getEstadoActual())) {
+            throw new RuntimeException("No se puede modificar la clave de una encomienda que ya ha sido entregada.");
+        }
+
+        if (req.getNuevaClaveEntrega() == null || !req.getNuevaClaveEntrega().matches("\\d{4}")) {
+            throw new RuntimeException("La nueva clave debe componerse exactamente de 4 dígitos numéricos.");
+        }
+
+        String claveAnterior = envio.getClaveEntrega();
+        envio.setClaveEntrega(req.getNuevaClaveEntrega());
+        Envio actualizado = envioRepository.save(envio);
+
+        historialEnvioService.registrarEvento(
+                actualizado,
+                empleado,
+                "CLAVE_RECTIFICADA",
+                "Clave de entrega rectificada en ventanilla por solicitud de usuario. Motivo: " +
+                        (req.getMotivo() != null && !req.getMotivo().isBlank() ? req.getMotivo() : "Corrección de remitente")
+        );
+
+        return actualizado;
+    }
+
+    // =========================================================================
+    // INVENTARIO FÍSICO DE ALMACÉN EN AGENCIA
+    // =========================================================================
+    public List<InventarioItemDTO> obtenerInventarioAlmacen(Integer idAgencia) {
+        List<Envio> envios = envioRepository.findInventarioByAgencia(idAgencia);
+        List<InventarioItemDTO> items = new ArrayList<>();
+
+        for (Envio e : envios) {
+            InventarioItemDTO dto = new InventarioItemDTO();
+            dto.setId(e.getId());
+            dto.setCodigoTracking(e.getCodigoTracking());
+            dto.setRemitenteDni(e.getRemitenteDni());
+            dto.setDestinatarioDni(e.getDestinatarioDni());
+            dto.setPesoReal(e.getPesoReal());
+            dto.setCostoTotal(e.getCostoTotal());
+            dto.setTipoComprobante(e.getTipoComprobante());
+            dto.setSerieComprobante(e.getSerieComprobante());
+            dto.setNumeroComprobante(e.getNumeroComprobante());
+            dto.setClaveEntrega(e.getClaveEntrega());
+            dto.setUbicacionAlmacen(e.getUbicacionAlmacen());
+            dto.setEstadoActual(e.getEstadoActual());
+            dto.setIdAgenciaOrigen(e.getAgenciaOrigen().getId());
+            dto.setNombreAgenciaOrigen(e.getAgenciaOrigen().getNombre());
+            dto.setIdAgenciaDestino(e.getAgenciaDestino().getId());
+            dto.setNombreAgenciaDestino(e.getAgenciaDestino().getNombre());
+
+            // Clasificación lógica de inventario
+            if (e.getAgenciaOrigen().getId().equals(idAgencia) &&
+                    ("REGISTRADO".equalsIgnoreCase(e.getEstadoActual()) || "EN_ALMACEN_ORIGEN".equalsIgnoreCase(e.getEstadoActual()))) {
+                dto.setCategoriaAlmacen("PENDIENTE_SALIDA");
+            } else {
+                dto.setCategoriaAlmacen("EN_CUSTODIA_ENTREGA");
+            }
+
+            items.add(dto);
+        }
+
+        return items;
+    }
+
+    @Transactional
+    public Envio actualizarUbicacionAlmacen(String tracking, String nuevaUbicacion) {
+        Usuario empleado = getUsuarioActual();
+        Envio envio = envioRepository.findByCodigoTracking(tracking)
+                .orElseThrow(() -> new RuntimeException("Envío no encontrado: " + tracking));
+
+        envio.setUbicacionAlmacen(nuevaUbicacion != null ? nuevaUbicacion : "BAHIA_RECEPCION");
+        Envio actualizado = envioRepository.save(envio);
+
+        historialEnvioService.registrarEvento(
+                actualizado,
+                empleado,
+                "REUBICACION_ALMACEN",
+                "Reubicado internamente a: " + nuevaUbicacion
+        );
+
+        return actualizado;
+    }
+
     public List<Envio> obtenerPendientesPorAgencia(Integer idAgenciaFiltro) {
-        String dniEmpleado = SecurityContextHolder.getContext().getAuthentication().getName();
-        Usuario empleado = usuarioRepository.findByDni(dniEmpleado)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        Usuario empleado = getUsuarioActual();
 
         Agencia origen = empleado.getAgencia();
         if (origen == null) {
@@ -127,9 +290,7 @@ public class EnvioService {
 
     @Transactional
     public Envio actualizarEstado(String codigoTracking, String nuevoEstado, String observacion) {
-        String dniEmpleado = SecurityContextHolder.getContext().getAuthentication().getName();
-        Usuario empleado = usuarioRepository.findByDni(dniEmpleado)
-                .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado"));
+        Usuario empleado = getUsuarioActual();
 
         Envio envio = envioRepository.findByCodigoTracking(codigoTracking)
                 .orElseThrow(() -> new RuntimeException("Envío no encontrado: " + codigoTracking));

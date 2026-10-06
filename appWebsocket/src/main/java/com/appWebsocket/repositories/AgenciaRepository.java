@@ -8,5 +8,6 @@ import java.util.List;
 
 @Repository
 public interface AgenciaRepository extends JpaRepository<Agencia, Integer> {
+    List<Agencia> findByActivoTrue();
     List<Agencia> findByEstado(String estado);
 }

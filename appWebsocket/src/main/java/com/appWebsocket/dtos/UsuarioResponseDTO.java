@@ -13,6 +13,9 @@ public class UsuarioResponseDTO {
     private String telefono;
     private BigDecimal sueldoBase;
     private LocalDate fechaIngreso;
+    private LocalDate fechaNacimiento;
+    private Integer edad;
+    private Boolean activo;
     private String estadoEmpleado;
     private String rol;
     private String agenciaNombre;
@@ -22,7 +25,8 @@ public class UsuarioResponseDTO {
 
     public UsuarioResponseDTO(Integer id, String dni, String nombres, String apellidos,
                               String email, String telefono, BigDecimal sueldoBase,
-                              LocalDate fechaIngreso, String estadoEmpleado,
+                              LocalDate fechaIngreso, LocalDate fechaNacimiento, Integer edad,
+                              Boolean activo, String estadoEmpleado,
                               String rol, String agenciaNombre, Integer idAgencia) {
         this.id = id;
         this.dni = dni;
@@ -36,6 +40,9 @@ public class UsuarioResponseDTO {
         this.telefono = telefono;
         this.sueldoBase = sueldoBase;
         this.fechaIngreso = fechaIngreso;
+        this.fechaNacimiento = fechaNacimiento;
+        this.edad = edad;
+        this.activo = activo != null ? activo : true;
         this.estadoEmpleado = estadoEmpleado != null ? estadoEmpleado : "ACTIVO";
         this.rol = rol;
         this.agenciaNombre = agenciaNombre;
@@ -68,6 +75,15 @@ public class UsuarioResponseDTO {
 
     public LocalDate getFechaIngreso() { return fechaIngreso; }
     public void setFechaIngreso(LocalDate fechaIngreso) { this.fechaIngreso = fechaIngreso; }
+
+    public LocalDate getFechaNacimiento() { return fechaNacimiento; }
+    public void setFechaNacimiento(LocalDate fechaNacimiento) { this.fechaNacimiento = fechaNacimiento; }
+
+    public Integer getEdad() { return edad; }
+    public void setEdad(Integer edad) { this.edad = edad; }
+
+    public Boolean getActivo() { return activo; }
+    public void setActivo(Boolean activo) { this.activo = activo; }
 
     public String getEstadoEmpleado() { return estadoEmpleado; }
     public void setEstadoEmpleado(String estadoEmpleado) { this.estadoEmpleado = estadoEmpleado; }

@@ -43,8 +43,9 @@ public class FlotaService {
         Usuario despachador = usuarioRepository.findByDni(dniDespachador)
                 .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado"));
 
-        Vehiculo vehiculo = vehiculoRepository.findById(request.getIdVehiculo())
-                .orElseThrow(() -> new RuntimeException("Vehículo no encontrado"));
+        // 1. Bloqueo Pesimista del vehículo para garantizar cálculo de capacidad atómico sin colisión
+        Vehiculo vehiculo = vehiculoRepository.findByIdWithLock(request.getIdVehiculo())
+                .orElseThrow(() -> new RuntimeException("Vehículo no encontrado o bloqueado por otra operación"));
 
         Usuario conductor = usuarioRepository.findById(request.getIdConductor())
                 .orElseThrow(() -> new RuntimeException("Conductor no encontrado"));
@@ -68,8 +69,9 @@ public class FlotaService {
             throw new RuntimeException("Debe seleccionar al menos un envío para armar el manifiesto");
         }
 
-        // 1. Buscamos todos los paquetes seleccionados
-        List<Envio> envios = envioRepository.findAllById(request.getIdEnvios());
+        // 2. Bloqueo Pesimista (SELECT ... FOR UPDATE) sobre los paquetes seleccionados
+        // Previene condición de carrera (evita que dos despachadores suban el mismo paquete a dos camiones distintos)
+        List<Envio> envios = envioRepository.findAllByIdInWithLock(request.getIdEnvios());
 
         for (Envio e : envios) {
             if (!"REGISTRADO".equalsIgnoreCase(e.getEstadoActual()) && !"EN_ESCALA".equalsIgnoreCase(e.getEstadoActual())) {
@@ -140,19 +142,25 @@ public class FlotaService {
     }
 
     public List<Vehiculo> obtenerVehiculosDisponibles() {
-        return vehiculoRepository.findByEstado("DISPONIBLE");
+        return vehiculoRepository.findByEstadoAndActivoTrue("DISPONIBLE");
     }
 
     public List<Vehiculo> obtenerTodosLosVehiculos() {
-        return vehiculoRepository.findAll();
+        return vehiculoRepository.findByActivoTrue();
     }
 
     public List<Usuario> obtenerConductoresDisponibles() {
-        return usuarioRepository.findByRol_Nombre("ROLE_REPARTIDOR");
+        List<Usuario> conductores = usuarioRepository.findByRol_Nombre("ROLE_CONDUCTOR");
+        if (conductores.isEmpty()) {
+            conductores = usuarioRepository.findByRol_Nombre("ROLE_REPARTIDOR");
+        } else {
+            conductores.addAll(usuarioRepository.findByRol_Nombre("ROLE_REPARTIDOR"));
+        }
+        return conductores.stream().filter(u -> Boolean.TRUE.equals(u.getActivo())).toList();
     }
 
     public List<Agencia> obtenerAgencias() {
-        return agenciaRepository.findByEstado("ACTIVO");
+        return agenciaRepository.findByActivoTrue();
     }
 
     @Transactional

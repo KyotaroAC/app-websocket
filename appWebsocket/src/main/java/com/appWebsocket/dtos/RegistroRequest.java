@@ -8,10 +8,18 @@ public class RegistroRequest {
     private String apellidos;
     private String email;
     private String telefono;
+    private String direccion;
+    private java.time.LocalDate fechaNacimiento;
     private BigDecimal sueldoBase;
     private String password;
-    private String rol; // ROLE_REPARTIDOR, ROLE_OPERARIO, ROLE_ADMIN
+    private String rol; // ROLE_REPARTIDOR, ROLE_OPERARIO, ROLE_ADMIN, etc.
     private Integer idAgencia;
+
+    public String getDireccion() { return direccion; }
+    public void setDireccion(String direccion) { this.direccion = direccion; }
+
+    public java.time.LocalDate getFechaNacimiento() { return fechaNacimiento; }
+    public void setFechaNacimiento(java.time.LocalDate fechaNacimiento) { this.fechaNacimiento = fechaNacimiento; }
 
     // Getters y Setters
     public String getDni() { return dni; }

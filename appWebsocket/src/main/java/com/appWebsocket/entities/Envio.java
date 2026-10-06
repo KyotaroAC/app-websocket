@@ -37,6 +37,39 @@ public class Envio {
     @JoinColumn(name = "id_agencia_destino", nullable = false)
     private Agencia agenciaDestino;
 
+    @Column(name = "tipo_comprobante", length = 20)
+    private String tipoComprobante = "BOLETA";
+
+    @Column(name = "serie_comprobante", length = 10)
+    private String serieComprobante = "B001";
+
+    @Column(name = "numero_comprobante")
+    private Integer numeroComprobante;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal subtotal = BigDecimal.ZERO;
+
+    @Column(precision = 10, scale = 2)
+    private BigDecimal igv = BigDecimal.ZERO;
+
+    @Column(name = "clave_entrega", length = 4, nullable = false)
+    private String claveEntrega = "1234";
+
+    @Column(name = "numero_operacion_pago", length = 50)
+    private String numeroOperacionPago;
+
+    @Column(name = "ubicacion_almacen", length = 50)
+    private String ubicacionAlmacen = "BAHIA_RECEPCION";
+
+    @Column(name = "dni_receptor", length = 11)
+    private String dniReceptor;
+
+    @Column(name = "nombre_receptor", length = 150)
+    private String nombreReceptor;
+
+    @Column(name = "fecha_entrega")
+    private java.time.LocalDateTime fechaEntrega;
+
     // Mapeo seguro de ENUMs desde la base de datos
     @Column(name = "modalidad_pago", nullable = false, columnDefinition = "ENUM('PAGO_ORIGEN', 'PAGO_DESTINO', 'CUENTA_CORRIENTE')")
     private String modalidadPago;
@@ -69,6 +102,28 @@ public class Envio {
     public void setAgenciaOrigen(Agencia agenciaOrigen) { this.agenciaOrigen = agenciaOrigen; }
     public Agencia getAgenciaDestino() { return agenciaDestino; }
     public void setAgenciaDestino(Agencia agenciaDestino) { this.agenciaDestino = agenciaDestino; }
+    public String getTipoComprobante() { return tipoComprobante; }
+    public void setTipoComprobante(String tipoComprobante) { this.tipoComprobante = tipoComprobante; }
+    public String getSerieComprobante() { return serieComprobante; }
+    public void setSerieComprobante(String serieComprobante) { this.serieComprobante = serieComprobante; }
+    public Integer getNumeroComprobante() { return numeroComprobante; }
+    public void setNumeroComprobante(Integer numeroComprobante) { this.numeroComprobante = numeroComprobante; }
+    public BigDecimal getSubtotal() { return subtotal; }
+    public void setSubtotal(BigDecimal subtotal) { this.subtotal = subtotal; }
+    public BigDecimal getIgv() { return igv; }
+    public void setIgv(BigDecimal igv) { this.igv = igv; }
+    public String getClaveEntrega() { return claveEntrega; }
+    public void setClaveEntrega(String claveEntrega) { this.claveEntrega = claveEntrega; }
+    public String getNumeroOperacionPago() { return numeroOperacionPago; }
+    public void setNumeroOperacionPago(String numeroOperacionPago) { this.numeroOperacionPago = numeroOperacionPago; }
+    public String getUbicacionAlmacen() { return ubicacionAlmacen; }
+    public void setUbicacionAlmacen(String ubicacionAlmacen) { this.ubicacionAlmacen = ubicacionAlmacen; }
+    public String getDniReceptor() { return dniReceptor; }
+    public void setDniReceptor(String dniReceptor) { this.dniReceptor = dniReceptor; }
+    public String getNombreReceptor() { return nombreReceptor; }
+    public void setNombreReceptor(String nombreReceptor) { this.nombreReceptor = nombreReceptor; }
+    public java.time.LocalDateTime getFechaEntrega() { return fechaEntrega; }
+    public void setFechaEntrega(java.time.LocalDateTime fechaEntrega) { this.fechaEntrega = fechaEntrega; }
     public String getModalidadPago() { return modalidadPago; }
     public void setModalidadPago(String modalidadPago) { this.modalidadPago = modalidadPago; }
     public String getMetodoPago() { return metodoPago; }

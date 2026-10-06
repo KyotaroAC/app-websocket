@@ -50,6 +50,9 @@ public class UsuarioController {
                 u.getTelefono(),
                 u.getSueldoBase(),
                 u.getFechaIngreso(),
+                u.getFechaNacimiento(),
+                u.getEdad(),
+                u.getActivo(),
                 u.getEstadoEmpleado(),
                 u.getRol() != null ? u.getRol().getNombre() : "SIN_ROL",
                 u.getAgencia() != null ? u.getAgencia().getNombre() : "Sede Central",
@@ -57,11 +60,11 @@ public class UsuarioController {
         );
     }
 
-    // Listar todos los usuarios con información completa de contacto y laboral (exclusivo ADMIN)
+    // Listar todos los usuarios activos con información completa (exclusivo ADMIN)
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> listarUsuarios() {
-        List<UsuarioResponseDTO> usuarios = usuarioRepository.findAll().stream()
+        List<UsuarioResponseDTO> usuarios = usuarioRepository.findByActivoTrue().stream()
                 .map(this::mapToDTO)
                 .collect(Collectors.toList());
 
@@ -130,13 +133,24 @@ public class UsuarioController {
         return ResponseEntity.ok(reporte);
     }
 
-    // Registrar nuevo empleado con datos de contacto y sueldo (exclusivo ADMIN)
+    // Registrar nuevo empleado con datos de contacto, fecha de nacimiento y validación de mayoría de edad
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> crearUsuario(@RequestBody RegistroRequest request) {
         try {
-            if (usuarioRepository.findByDni(request.getDni()).isPresent()) {
-                return ResponseEntity.badRequest().body("Error: El DNI ya está registrado.");
+            if (request.getDni() == null || !request.getDni().matches("\\d{8}")) {
+                return ResponseEntity.badRequest().body("Error de validación: El DNI debe contener exactamente 8 dígitos numéricos.");
+            }
+
+            if (usuarioRepository.existsByDni(request.getDni())) {
+                return ResponseEntity.badRequest().body("Error: El DNI " + request.getDni() + " ya se encuentra registrado.");
+            }
+
+            if (request.getFechaNacimiento() != null) {
+                int edad = java.time.Period.between(request.getFechaNacimiento(), LocalDate.now()).getYears();
+                if (edad < 18) {
+                    return ResponseEntity.badRequest().body("Error laboral: El colaborador debe ser mayor de edad (Edad calculada: " + edad + " años).");
+                }
             }
 
             Agencia agencia = null;
@@ -146,17 +160,20 @@ public class UsuarioController {
             }
 
             Rol rol = rolRepository.findByNombre(request.getRol())
-                    .orElseThrow(() -> new RuntimeException("Rol no encontrado"));
+                    .orElseThrow(() -> new RuntimeException("Rol no encontrado: " + request.getRol()));
 
             Usuario usuario = new Usuario();
             usuario.setDni(request.getDni());
             usuario.setNombres(request.getNombres());
             usuario.setApellidos(request.getApellidos());
+            usuario.setFechaNacimiento(request.getFechaNacimiento());
             usuario.setEmail(request.getEmail());
             usuario.setTelefono(request.getTelefono());
+            usuario.setDireccion(request.getDireccion());
             usuario.setSueldoBase(request.getSueldoBase());
             usuario.setFechaIngreso(LocalDate.now());
             usuario.setEstadoEmpleado("ACTIVO");
+            usuario.setActivo(true);
             usuario.setPasswordHash(passwordEncoder.encode(request.getPassword()));
             usuario.setRol(rol);
             usuario.setAgencia(agencia);
@@ -213,7 +230,7 @@ public class UsuarioController {
         }
     }
 
-    // Eliminar un empleado (exclusivo ADMIN, no puede eliminarse a sí mismo)
+    // Eliminación Lógica (Soft Delete) de empleado (exclusivo ADMIN, no puede eliminarse a sí mismo)
     @DeleteMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> eliminarUsuario(@PathVariable Integer id) {
@@ -223,11 +240,15 @@ public class UsuarioController {
                     .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
             if (usuario.getDni().equals(dniActual)) {
-                return ResponseEntity.badRequest().body("No puede eliminar su propia cuenta de administrador.");
+                return ResponseEntity.badRequest().body("No puede dar de baja su propia cuenta de administrador.");
             }
 
-            usuarioRepository.delete(usuario);
-            return ResponseEntity.ok("Usuario eliminado exitosamente");
+            // Baja lógica: preserva el historial, kárdex y nóminas históricas
+            usuario.setActivo(false);
+            usuario.setEstadoEmpleado("CESADO");
+            usuarioRepository.save(usuario);
+
+            return ResponseEntity.ok("Colaborador dado de baja lógicamente (Estado: CESADO). Registros históricos preservados.");
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(e.getMessage());
         }

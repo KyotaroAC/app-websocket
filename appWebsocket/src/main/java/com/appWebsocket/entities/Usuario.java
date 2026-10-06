@@ -36,6 +36,12 @@ public class Usuario {
     @Column(name = "fecha_ingreso")
     private LocalDate fechaIngreso = LocalDate.now();
 
+    @Column(name = "fecha_nacimiento")
+    private LocalDate fechaNacimiento;
+
+    @Column(nullable = false)
+    private Boolean activo = true;
+
     @Column(name = "estado_empleado", length = 20, nullable = false)
     private String estadoEmpleado = "ACTIVO";
 
@@ -98,6 +104,17 @@ public class Usuario {
 
     public String getTokenRecuperacion() { return tokenRecuperacion; }
     public void setTokenRecuperacion(String tokenRecuperacion) { this.tokenRecuperacion = tokenRecuperacion; }
+
+    public LocalDate getFechaNacimiento() { return fechaNacimiento; }
+    public void setFechaNacimiento(LocalDate fechaNacimiento) { this.fechaNacimiento = fechaNacimiento; }
+
+    public Boolean getActivo() { return activo; }
+    public void setActivo(Boolean activo) { this.activo = activo; }
+
+    public Integer getEdad() {
+        if (fechaNacimiento == null) return null;
+        return java.time.Period.between(fechaNacimiento, LocalDate.now()).getYears();
+    }
 
     public LocalDateTime getExpiracionToken() { return expiracionToken; }
     public void setExpiracionToken(LocalDateTime expiracionToken) { this.expiracionToken = expiracionToken; }

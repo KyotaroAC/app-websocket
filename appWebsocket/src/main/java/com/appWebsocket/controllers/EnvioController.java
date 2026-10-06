@@ -81,4 +81,55 @@ public class EnvioController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
+    // =========================================================================
+    // ENTREGA FÍSICA CON BLOQUEO PESIMISTA Y PIN DE 4 DÍGITOS
+    // =========================================================================
+    @PostMapping("/entregar-pin")
+    public ResponseEntity<?> entregarEnvioConPin(@RequestBody com.appWebsocket.dtos.EntregaPaqueteRequest request) {
+        try {
+            Envio entregado = envioService.entregarEnvioConPin(request);
+            return ResponseEntity.ok(entregado);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // RECTIFICACIÓN / CAMBIO DE CLAVE DE ENTREGA
+    // =========================================================================
+    @PostMapping("/rectificar-pin")
+    public ResponseEntity<?> rectificarClaveEntrega(@RequestBody com.appWebsocket.dtos.CambioClaveEntregaRequest request) {
+        try {
+            Envio actualizado = envioService.rectificarClaveEntrega(request);
+            return ResponseEntity.ok(actualizado);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    // =========================================================================
+    // INVENTARIO DE ALMACÉN POR AGENCIA
+    // =========================================================================
+    @GetMapping("/inventario/{idAgencia}")
+    public ResponseEntity<?> obtenerInventarioAlmacen(@PathVariable Integer idAgencia) {
+        try {
+            return ResponseEntity.ok(envioService.obtenerInventarioAlmacen(idAgencia));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @PutMapping("/{codigoTracking}/ubicacion-almacen")
+    public ResponseEntity<?> actualizarUbicacionAlmacen(
+            @PathVariable String codigoTracking,
+            @RequestBody Map<String, String> body) {
+        try {
+            String nuevaUbicacion = body.get("nuevaUbicacion");
+            Envio actualizado = envioService.actualizarUbicacionAlmacen(codigoTracking, nuevaUbicacion);
+            return ResponseEntity.ok(actualizado);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

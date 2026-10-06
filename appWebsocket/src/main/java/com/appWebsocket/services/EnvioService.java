@@ -17,6 +17,8 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
 
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+
 @Service
 public class EnvioService {
 
@@ -24,17 +26,20 @@ public class EnvioService {
     private final AgenciaRepository agenciaRepository;
     private final UsuarioRepository usuarioRepository;
     private final HistorialEnvioService historialEnvioService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     private final BigDecimal TARIFA_POR_KILO = new BigDecimal("15.00");
 
     public EnvioService(EnvioRepository envioRepository,
                         AgenciaRepository agenciaRepository,
                         UsuarioRepository usuarioRepository,
-                        HistorialEnvioService historialEnvioService) {
+                        HistorialEnvioService historialEnvioService,
+                        SimpMessagingTemplate messagingTemplate) {
         this.envioRepository = envioRepository;
         this.agenciaRepository = agenciaRepository;
         this.usuarioRepository = usuarioRepository;
         this.historialEnvioService = historialEnvioService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     private Usuario getUsuarioActual() {
@@ -122,6 +127,16 @@ public class EnvioService {
                 "Emisión de " + tipoComp + " " + serieComp + "-" + numeroComp + " en " + origen.getNombre()
         );
 
+        // Notificación WebSocket en tiempo real a todos los clientes (Almacén, Manifiestos, Kárdex)
+        try {
+            Map<String, Object> ws = new HashMap<>();
+            ws.put("tipo", "NUEVO_ENVIO");
+            ws.put("tracking", guardado.getCodigoTracking());
+            ws.put("idAgenciaOrigen", origen.getId());
+            ws.put("idAgenciaDestino", destino.getId());
+            messagingTemplate.convertAndSend("/topic/envios", (Object) ws);
+        } catch (Exception ignored) {}
+
         return guardado;
     }
 
@@ -165,6 +180,13 @@ public class EnvioService {
                 "ENTREGADO",
                 "Entrega física exitosa con validación de PIN. Retirado por: " + envio.getNombreReceptor() + " (DNI: " + envio.getDniReceptor() + ")"
         );
+
+        try {
+            Map<String, Object> ws = new HashMap<>();
+            ws.put("tipo", "ENVIO_ENTREGADO");
+            ws.put("tracking", entregado.getCodigoTracking());
+            messagingTemplate.convertAndSend("/topic/envios", (Object) ws);
+        } catch (Exception ignored) {}
 
         return entregado;
     }
@@ -258,6 +280,14 @@ public class EnvioService {
                 "Reubicado internamente a: " + nuevaUbicacion
         );
 
+        try {
+            Map<String, Object> ws = new HashMap<>();
+            ws.put("tipo", "UBICACION_ACTUALIZADA");
+            ws.put("tracking", tracking);
+            ws.put("nuevaUbicacion", nuevaUbicacion);
+            messagingTemplate.convertAndSend("/topic/envios", (Object) ws);
+        } catch (Exception ignored) {}
+
         return actualizado;
     }
 
@@ -308,6 +338,14 @@ public class EnvioService {
                 nuevoEstado,
                 observacion != null && !observacion.isBlank() ? observacion : "Actualización de estado a " + nuevoEstado
         );
+
+        try {
+            Map<String, Object> ws = new HashMap<>();
+            ws.put("tipo", "ESTADO_ACTUALIZADO");
+            ws.put("tracking", codigoTracking);
+            ws.put("nuevoEstado", nuevoEstado);
+            messagingTemplate.convertAndSend("/topic/envios", (Object) ws);
+        } catch (Exception ignored) {}
 
         return actualizado;
     }

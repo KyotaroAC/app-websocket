@@ -22,19 +22,22 @@ public class FlotaService {
     private final AgenciaRepository agenciaRepository;
     private final EnvioRepository envioRepository;
     private final HistorialEnvioService historialEnvioService;
+    private final org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate;
 
     public FlotaService(ManifiestoRepository manifiestoRepository,
                         VehiculoRepository vehiculoRepository,
                         UsuarioRepository usuarioRepository,
                         AgenciaRepository agenciaRepository,
                         EnvioRepository envioRepository,
-                        HistorialEnvioService historialEnvioService) {
+                        HistorialEnvioService historialEnvioService,
+                        org.springframework.messaging.simp.SimpMessagingTemplate messagingTemplate) {
         this.manifiestoRepository = manifiestoRepository;
         this.vehiculoRepository = vehiculoRepository;
         this.usuarioRepository = usuarioRepository;
         this.agenciaRepository = agenciaRepository;
         this.envioRepository = envioRepository;
         this.historialEnvioService = historialEnvioService;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional
@@ -134,6 +137,14 @@ public class FlotaService {
             );
         }
 
+        try {
+            java.util.Map<String, Object> ws = new java.util.HashMap<>();
+            ws.put("tipo", "MANIFIESTO_CREADO");
+            ws.put("idManifiesto", guardado.getId());
+            ws.put("codigoManifiesto", guardado.getCodigoManifiesto());
+            messagingTemplate.convertAndSend("/topic/envios", (Object) ws);
+        } catch (Exception ignored) {}
+
         return guardado;
     }
 
@@ -196,6 +207,13 @@ public class FlotaService {
                 );
             }
         }
+
+        try {
+            java.util.Map<String, Object> ws = new java.util.HashMap<>();
+            ws.put("tipo", "MANIFIESTO_RECEPCIONADO");
+            ws.put("idManifiesto", manifiesto.getId());
+            messagingTemplate.convertAndSend("/topic/envios", (Object) ws);
+        } catch (Exception ignored) {}
 
         return manifiesto;
     }

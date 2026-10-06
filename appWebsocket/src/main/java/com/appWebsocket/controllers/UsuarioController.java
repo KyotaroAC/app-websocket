@@ -253,4 +253,36 @@ public class UsuarioController {
             return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
+
+    // Cambio de contraseña para el usuario actualmente autenticado desde el dashboard
+    @PutMapping("/cambiar-password-sesion")
+    public ResponseEntity<?> cambiarPasswordSesion(@RequestBody Map<String, String> body) {
+        try {
+            String dni = SecurityContextHolder.getContext().getAuthentication().getName();
+            Usuario usuario = usuarioRepository.findByDni(dni)
+                    .orElseThrow(() -> new RuntimeException("Usuario en sesión no encontrado."));
+
+            String passwordActual = body.get("passwordActual");
+            String passwordNueva = body.get("passwordNueva");
+
+            if (passwordActual == null || passwordActual.isBlank() || passwordNueva == null || passwordNueva.isBlank()) {
+                return ResponseEntity.badRequest().body("Debe ingresar la contraseña actual y la nueva contraseña.");
+            }
+
+            if (passwordNueva.trim().length() < 6) {
+                return ResponseEntity.badRequest().body("La nueva contraseña debe tener al menos 6 caracteres.");
+            }
+
+            if (!passwordEncoder.matches(passwordActual, usuario.getPasswordHash())) {
+                return ResponseEntity.badRequest().body("La contraseña actual es incorrecta.");
+            }
+
+            usuario.setPasswordHash(passwordEncoder.encode(passwordNueva.trim()));
+            usuarioRepository.save(usuario);
+
+            return ResponseEntity.ok("Contraseña actualizada exitosamente.");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
 }

@@ -20,9 +20,13 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // El frontend se conectará a esta URL específica para iniciar la conexión en tiempo real
+        // 1. Soporte para conexión WebSocket pura y directa (ws:// o wss://)
         registry.addEndpoint("/ws-logistica")
-                .setAllowedOriginPatterns("*") // Permite conexiones desde cualquier frontend
-                .withSockJS(); // Respaldo por si el navegador bloquea WebSockets
+                .setAllowedOriginPatterns("*");
+
+        // 2. Soporte con fallback de emulación SockJS (XHR streaming / Polling)
+        registry.addEndpoint("/ws-logistica")
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
     }
 }

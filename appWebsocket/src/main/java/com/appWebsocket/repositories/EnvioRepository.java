@@ -44,7 +44,8 @@ public interface EnvioRepository extends JpaRepository<Envio, Integer> {
     // ==========================================
     @Query("SELECT e FROM Envio e WHERE " +
            "(e.agenciaOrigen.id = :agenciaId AND e.estadoActual IN ('REGISTRADO', 'EN_ALMACEN_ORIGEN')) " +
-           "OR (e.agenciaDestino.id = :agenciaId AND e.estadoActual IN ('EN_DESTINO', 'DISPONIBLE_RECOJO', 'EN_ALMACEN_DESTINO')) " +
+           "OR (e.agenciaDestino.id = :agenciaId AND e.estadoActual IN ('EN_DESTINO', 'DISPONIBLE_RECOJO', 'EN_ALMACEN_DESTINO', 'EN AGENCIA DESTINO')) " +
+           "OR ((e.agenciaOrigen.id = :agenciaId OR e.agenciaDestino.id = :agenciaId) AND e.estadoActual IN ('EXTRAVIADO', 'DANADO', 'RETENIDO_MTC', 'DEVUELTO')) " +
            "ORDER BY e.id DESC")
     List<Envio> findInventarioByAgencia(@Param("agenciaId") Integer agenciaId);
 

@@ -254,6 +254,8 @@ public class EnvioService {
             if (e.getAgenciaOrigen().getId().equals(idAgencia) &&
                     ("REGISTRADO".equalsIgnoreCase(e.getEstadoActual()) || "EN_ALMACEN_ORIGEN".equalsIgnoreCase(e.getEstadoActual()))) {
                 dto.setCategoriaAlmacen("PENDIENTE_SALIDA");
+            } else if (List.of("EXTRAVIADO", "DANADO", "RETENIDO_MTC", "DEVUELTO").contains(e.getEstadoActual() != null ? e.getEstadoActual().toUpperCase() : "")) {
+                dto.setCategoriaAlmacen("INCIDENCIA_OBSERVADO");
             } else {
                 dto.setCategoriaAlmacen("EN_CUSTODIA_ENTREGA");
             }
